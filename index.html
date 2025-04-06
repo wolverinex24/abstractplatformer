@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pressure Rush</title>
+    <style>
+        /* --- CSS remains the same --- */
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #000; color: #fff; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
+        #hud { width: 100%; padding: 12px 15px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; font-size: 1.2em; background: linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.4)); border-bottom: 1px solid rgba(255, 255, 255, 0.2); pointer-events: auto; text-shadow: 1px 1px 2px rgba(0,0,0,0.7); }
+        #hud > div { margin: 0 8px; flex-shrink: 0; display: flex; align-items: center; transition: transform 0.2s ease-out, color 0.2s linear; }
+        #hud button { padding: 6px 12px; font-size: 0.8em; cursor: pointer; background-color: #ffa500; border: 1px solid #ff8c00; color: black; border-radius: 4px; margin-left: 15px; transition: background-color 0.2s ease, transform 0.1s ease; }
+        #hud button:hover { background-color: #ffc04d; transform: translateY(-1px); }
+        #hud button:active { transform: translateY(0px); }
+        .score-pop { transform: scale(1.15); color: #ffff00; transition: transform 0.1s ease-in-out, color 0.1s linear; }
+        #resource-container { display: flex; align-items: center; min-width: 170px; }
+        #resource-label { margin-right: 8px; font-size: 0.9em; }
+        #resource-bar-outer { width: 120px; height: 18px; background-color: #333; border: 1px solid #aaa; border-radius: 5px; overflow: hidden; display: none; box-shadow: inset 0 1px 3px rgba(0,0,0,0.5); transition: box-shadow 0.2s linear; }
+        .resource-flash { box-shadow: inset 0 1px 3px rgba(0,0,0,0.5), 0 0 8px 2px #ffc107; }
+        #resource-bar-inner { height: 100%; width: 100%; background-color: #4CAF50; border-radius: 4px; transition: width 0.2s linear, background-color 0.2s linear; background-image: linear-gradient(to top, rgba(255,255,255,0.15), rgba(255,255,255,0) 50%); }
+        #resource-bar-inner.medium { background-color: #ffdd57; }
+        #resource-bar-inner.low { background-color: #f44336; }
+        @keyframes pulseCritical { 0%, 100% { box-shadow: inset 0 1px 3px rgba(0,0,0,0.5), 0 0 5px 1px rgba(255, 67, 54, 0.7); } 50% { box-shadow: inset 0 1px 3px rgba(0,0,0,0.5), 0 0 10px 3px rgba(255, 67, 54, 1.0); } }
+        #resource-bar-outer.critical-pulse { animation: pulseCritical 1s infinite ease-in-out; }
+        #shield-indicator { font-weight: bold; color: #000; margin-left: 15px; display: none; background-color: #66ffff; padding: 3px 10px; border-radius: 5px; box-shadow: 0 0 8px 2px #66ffff, inset 0 0 3px rgba(255,255,255,0.5); border: 1px solid #aafafa; text-shadow: none; transition: opacity 0.3s ease-in-out, transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+        @keyframes pulseShield { 0%, 100% { transform: scale(1); box-shadow: 0 0 8px 2px #66ffff, inset 0 0 3px rgba(255,255,255,0.5); } 50% { transform: scale(1.05); box-shadow: 0 0 14px 4px #88ffff, inset 0 0 5px rgba(255,255,255,0.7); } }
+        #shield-indicator.active-pulse { animation: pulseShield 1.2s infinite ease-in-out; }
+        #message-center { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.85); padding: 18px 30px; border-radius: 10px; font-size: 1.6em; text-align: center; max-width: 80%; z-index: 5; border: 1px solid rgba(255, 255, 255, 0.3); box-shadow: 0 2px 10px rgba(0,0,0,0.5); text-shadow: 1px 1px 2px rgba(0,0,0,0.7); display: block; opacity: 0; pointer-events: none; transition: opacity 0.4s ease-out; }
+        #message-center.visible { opacity: 1; pointer-events: auto; }
+        @keyframes hudFlash { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(255, 255, 100, 0.3); } }
+        @keyframes hudBgFlash { 0%, 100% { /* Keep original gradient */ } 50% { background: linear-gradient(to bottom, rgba(100,100,0,0.7), rgba(100,100,0,0.4)); } }
+         .element-flash { animation: hudFlash 0.5s ease-in-out; }
+         .hud-bg-flash { animation: hudBgFlash 0.6s ease-in-out; }
+        #pause-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(0, 0, 0, 0.85); padding: 40px 60px; border-radius: 15px; font-size: 2.5em; text-align: center; z-index: 5; display: none; font-weight: bold; border: 2px solid rgba(255,255,255,0.5); }
+        #start-screen, #game-over-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 10; pointer-events: auto; padding: 20px; box-sizing: border-box; }
+        #game-over-screen { display: none; }
+        button { padding: 15px 35px; font-size: 1.6em; cursor: pointer; margin-top: 25px; background-color: #4CAF50; border: none; color: white; border-radius: 8px; transition: background-color 0.2s ease, transform 0.1s ease; box-shadow: 0 4px 8px rgba(0,0,0,0.4); }
+        button:hover { background-color: #5cbf60; transform: translateY(-2px); }
+        button:active { transform: translateY(0px); }
+        h1 { font-size: 3.5em; margin-bottom: 15px; color: #ffa500; text-shadow: 2px 2px 5px rgba(0,0,0,0.7); }
+        p { font-size: 1.3em; margin: 12px 0; max-width: 700px; line-height: 1.5; }
+        .knowledge-info { font-style: italic; color: #aabbff; }
+        .collectible-knowledge { color: #66aaff; font-weight: bold; }
+        .collectible-resource { color: #ffdd57; font-weight: bold; }
+        .obstacle-vent { color: #99ffff; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <!-- UI HTML (no changes here) -->
+     <div id="ui">
+        <div id="hud">
+            <div id="score">Score: 0</div>
+            <div id="environment">Env: Surface</div>
+            <div id="pressure">Pressure: Normal</div>
+            <div id="resource-container">
+                <span id="resource-label">Oxygen:</span>
+                <div id="resource-bar-outer">
+                    <div id="resource-bar-inner"></div>
+                </div>
+            </div>
+            <div id="shield-indicator">SHIELD ACTIVE</div>
+            <button id="pause-button">Pause (P)</button>
+        </div>
+        <div id="message-center">Fact Placeholder</div>
+        <div id="pause-overlay">PAUSED</div>
+    </div>
+    <div id="start-screen">
+        <h1>Pressure Rush</h1>
+        <p>Navigate Professor Pressure through changing environments!</p>
+        <p>Use Arrow Keys: Left/Right to move, Up to Jump!, Down to Dive.</p>
+        <p>Press 'P' to Pause/Resume.</p>
+        <p>Collect <span class="collectible-knowledge">Blue Data</span> for Knowledge points & rewards!</p>
+        <p>Collect <span class="collectible-resource">Yellow Canisters</span> for Oxygen/Fuel in Ocean/Space.</p>
+        <p>Avoid <span style="color:#ff4d4d;">Red Obstacles</span>. Watch out for <span style="color:#aaaaff;">Fragile Obstacles</span> in Space!</p>
+        <p>Beware of <span class="obstacle-vent">Ocean Vents</span> and other hazards!</p>
+        <p>Manage Oxygen/Fuel in Ocean/Space.</p>
+        <button id="start-button">Start Game</button>
+    </div>
+    <div id="game-over-screen">
+        <h1>Game Over!</h1>
+        <p id="final-score">Final Score: 0</p>
+        <p id="final-distance">Distance Traveled: 0 m</p>
+        <p id="final-knowledge" class="knowledge-info">Knowledge Collected: 0 points</p>
+        <p id="game-over-reason" style="color: #ffdddd;">Reason: Collision</p>
+        <p class="knowledge-info">Keep applying physics knowledge!</p>
+        <button id="retry-button">Retry</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+        // --- Global Variables ---
+        let scene, camera, renderer;
+        let composer, bloomPass;
+        let player, playerCollider, playerMaterial;
+        // *** NEW *** Ground variables
+        let ground1, ground2, groundMaterial;
+        const groundLength = 200;
+        // --- End NEW Ground variables ---
+        let obstacles = [];
+        let collectibles = [];
+        let activeParticles = [];
+        let lanes = [-2, 0, 2];
+        let currentLane = 1;
+        let targetLane = 1;
+        let baseSpeed = 0.12;
+        let worldSpeed = baseSpeed;
+        let gravity = 0.008;
+        let jumpForce = 0.24;
+        let playerVelocityY = 0;
+        let playerVelocityX = 0;
+        let score = 0;
+        let distance = 0;
+        let knowledgePoints = 0;
+        let gameRunning = false;
+        let isPaused = false;
+        let clock = new THREE.Clock(false);
+
+        const PLAYER_Z_POSITION = 0;
+        const BASE_CAMERA_Y = 3.5;
+        const BASE_CAMERA_Z_OFFSET = 7;
+        const CAMERA_Z_OFFSET = BASE_CAMERA_Z_OFFSET;
+        const SPAWN_DISTANCE = -100;
+        const DESPAWN_DISTANCE = 15; // Used for obstacles/collectibles AND ground repositioning check
+        const CAMERA_NEAR_PLANE = 0.1;
+        const CAMERA_FAR_PLANE = 1000;
+
+        // Resource Management, Hazards, Shield vars... (Keep as is)
+        let maxResource = 100;
+        let currentResource = maxResource;
+        let resourceConsumptionRate = 0;
+        let resourceReplenishAmount = 15;
+        let resourceCritical = false;
+        let lastHazardCheck = 0;
+        const HAZARD_CHECK_INTERVAL = 3;
+        const HAZARD_PROBABILITY = 0.15;
+        let currentHazardEffect = null;
+        let hazardTimer = 0;
+        let shieldActive = false;
+        let shieldDuration = 5;
+        let shieldTimer = 0;
+        let shieldKnowledgeThreshold = 10;
+        let nextShieldThreshold = shieldKnowledgeThreshold;
+
+        // Camera Effects State (Keep as is)
+        let isJumpingZoom = false;
+        let targetCameraZ = PLAYER_Z_POSITION + BASE_CAMERA_Z_OFFSET;
+        let currentCameraZ = targetCameraZ;
+        const JUMP_ZOOM_AMOUNT = 1.5;
+        const ZOOM_SPEED = 0.05;
+        let cameraShakeIntensity = 0;
+        let cameraShakeDuration = 0;
+        let cameraShakeTimer = 0;
+        const SHAKE_DECAY = 0.9;
+
+         // Audio (Keep as is)
+         let audioCtx;
+         let backgroundMusicOscillator;
+         let backgroundMusicGain;
+         let musicFilter;
+         let loopTimeout;
+
+        // Environment Settings
+        const OBSTACLE_TYPE = { NORMAL: 'normal', FRAGILE: 'fragile', VENT: 'vent' };
+        const OCEAN_VENT_BOOST = 0.35;
+
+        // *** MODIFIED *** Added groundEmissiveColor
+        const ENVIRONMENTS = {
+             SURFACE: { name: "Surface", color: 0x87CEEB, fogColor: 0xaaaaaa, fogDensity: 0.015, gravityMultiplier: 1.0, jumpMultiplier: 1.0, speedMultiplier: 1.0, pressureText: "Normal", pressureVal: 1, groundColor: 0x556B2F, groundEmissiveColor: 0x113311, resourceLabel: "N/A", consumption: 0, playerColor: 0xFFD700, hazards: ['wind'], obstacleTypes: [{ type: OBSTACLE_TYPE.NORMAL, weight: 100 }] },
+             OCEAN: { name: "Ocean", color: 0x00008B, fogColor: 0x000050, fogDensity: 0.04, gravityMultiplier: 0.6, jumpMultiplier: 0.7, speedMultiplier: 0.9, pressureText: "High", pressureVal: 10, groundColor: 0x104060, groundEmissiveColor: 0x051040, resourceLabel: "Oxygen", consumption: 1.8, playerColor: 0xADD8E6, hazards: ['current'], obstacleTypes: [{ type: OBSTACLE_TYPE.NORMAL, weight: 95 }, { type: OBSTACLE_TYPE.VENT, weight: 5 }] },
+             SPACE: { name: "Space", color: 0x000000, fogColor: 0x111111, fogDensity: 0.005, gravityMultiplier: 0.25, jumpMultiplier: 1.6, speedMultiplier: 1.1, pressureText: "Vacuum", pressureVal: 0, groundColor: 0x222222, groundEmissiveColor: 0x333333, resourceLabel: "Fuel", consumption: 1.3, playerColor: 0xC0C0C0, hazards: ['debris'], obstacleTypes: [{ type: OBSTACLE_TYPE.NORMAL, weight: 60 }, { type: OBSTACLE_TYPE.FRAGILE, weight: 40 }] }
+        };
+        let currentEnvironment = ENVIRONMENTS.SURFACE;
+        let environmentChangeDistance = 900;
+        let nextEnvironmentChange = environmentChangeDistance;
+
+        // Educational Facts (Keep as is)
+        const facts = { SURFACE: [ "Atmospheric pressure is the weight of air above.", "Pressure = Force / Area.", "Air pressure decreases with altitude.", "Normal force pushes back against gravity.", "Friction opposes motion.", "Wind is caused by differences in air pressure." ], OCEAN: [ "Water pressure increases with depth.", "Buoyancy is upward fluid force.", "Objects feel lighter in water.", "Liquid pressure acts in all directions.", "Deep-sea creatures adapt to high pressure.", "Ocean currents transport heat around the globe.", "Hydrothermal vents release heat and chemicals from below the seabed." ], SPACE: [ "Space is nearly zero pressure (vacuum).", "Liquids boil instantly in vacuum.", "Spacesuits provide needed pressure.", "Gravity is weaker but present near planets.", "Fragile objects may shatter easily in space!", "Non-contact forces act over distances.", "Space debris travels at very high speeds." ], GENERAL: [ "Collect Blue Data for knowledge points!", "Collect Yellow Canisters for resources!", "Watch the pressure gauge!", "Adapt your movement!", "Physics explains the universe!", "Knowledge can protect you!" ] };
+        let lastFactTime = 0;
+        const FACT_COOLDOWN = 5;
+
+        // Collectible/Vent geometries and materials (Keep as is)
+        const knowledgeCollectibleGeo = new THREE.SphereGeometry(0.4, 16, 8);
+        const knowledgeCollectibleMat = new THREE.MeshStandardMaterial({ color: 0x007bff, emissive: 0x55ccff, emissiveIntensity: 1.5 });
+        const resourceCollectibleGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.8, 16);
+        const resourceCollectibleMat = new THREE.MeshStandardMaterial({ color: 0xffc107, emissive: 0xffea00, emissiveIntensity: 1.2 });
+        const ventGeo = new THREE.BoxGeometry(0.6, 0.2, 0.6);
+        const ventMat = new THREE.MeshStandardMaterial({ color: 0xadd8e6, emissive: 0xffffff, emissiveIntensity: 0.8, transparent: true, opacity: 0.7 });
+
+        // UI Elements References... (Keep as is)
+        const hudElement = document.getElementById('hud');
+        const scoreElement = document.getElementById('score');
+        const environmentElement = document.getElementById('environment');
+        const pressureElement = document.getElementById('pressure');
+        const messageCenterElement = document.getElementById('message-center');
+        const pauseOverlayElement = document.getElementById('pause-overlay');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreElement = document.getElementById('final-score');
+        const finalDistanceElement = document.getElementById('final-distance');
+        const finalKnowledgeElement = document.getElementById('final-knowledge');
+        const gameOverReasonElement = document.getElementById('game-over-reason');
+        const startButton = document.getElementById('start-button');
+        const retryButton = document.getElementById('retry-button');
+        const pauseButton = document.getElementById('pause-button');
+        const resourceContainer = document.getElementById('resource-container');
+        const resourceLabelElement = document.getElementById('resource-label');
+        const resourceBarOuter = document.getElementById('resource-bar-outer');
+        const resourceBarInner = document.getElementById('resource-bar-inner');
+        const shieldIndicator = document.getElementById('shield-indicator');
+
+        // Helper for temporary class flashing (Keep as is)
+        function flashElement(element, className, duration = 500) { if (!element) return; element.classList.add(className); setTimeout(() => { element.classList.remove(className); }, duration); }
+
+        // Audio Functions... (Keep as is)
+        function initAudio() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { console.warn("Web Audio API not supported"); } } }
+        function playTone(frequency = 440, duration = 0.1, type = 'square', volume = 0.3) { if (!audioCtx || audioCtx.state === 'suspended') return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type=type; o.frequency.setValueAtTime(frequency, audioCtx.currentTime); g.gain.setValueAtTime(volume, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + duration); }
+        const musicLoopDuration = 4; const musicNoteSequence = [ 130.81, 164.81, 196.00, 164.81 ]; const musicNoteDuration = musicLoopDuration / musicNoteSequence.length; function startBackgroundMusic() { if (!audioCtx || backgroundMusicOscillator) return; if (audioCtx.state === 'suspended') { audioCtx.resume().catch(e => console.error("Error resuming audio context:", e)); } try { backgroundMusicOscillator = audioCtx.createOscillator(); backgroundMusicOscillator.type = 'square'; musicFilter = audioCtx.createBiquadFilter(); musicFilter.type = 'lowpass'; musicFilter.frequency.value = 1000; backgroundMusicGain = audioCtx.createGain(); backgroundMusicGain.gain.setValueAtTime(0.001, audioCtx.currentTime); backgroundMusicGain.gain.linearRampToValueAtTime(0.04, audioCtx.currentTime + 4); backgroundMusicOscillator.connect(musicFilter); musicFilter.connect(backgroundMusicGain); backgroundMusicGain.connect(audioCtx.destination); const scheduleNotes = (loopStartTime) => { musicNoteSequence.forEach((freq, index) => { if (backgroundMusicOscillator) { backgroundMusicOscillator.frequency.setValueAtTime(freq, loopStartTime + index * musicNoteDuration); } }); }; const scheduleNextLoop = () => { if (!audioCtx || !backgroundMusicOscillator) return; let now = audioCtx.currentTime; let nextLoopStartTime = Math.ceil((now + 0.1) / musicLoopDuration) * musicLoopDuration; scheduleNotes(nextLoopStartTime); let delay = (nextLoopStartTime - now - 0.05) * 1000; if (delay < 0) delay = 0; loopTimeout = setTimeout(scheduleNextLoop, delay); }; backgroundMusicOscillator.start(audioCtx.currentTime); scheduleNotes(audioCtx.currentTime); scheduleNextLoop(); console.log("8-bit Background music started"); } catch (e) { console.error("Error starting background music:", e); stopBackgroundMusic(); } } function stopBackgroundMusic() { clearTimeout(loopTimeout); if (backgroundMusicOscillator) { try { if (backgroundMusicGain) { backgroundMusicGain.gain.cancelScheduledValues(audioCtx.currentTime); backgroundMusicGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1); } backgroundMusicOscillator.stop(audioCtx.currentTime + 0.15); } catch (e) { console.error("Error stopping background music:", e); } finally { backgroundMusicOscillator = null; backgroundMusicGain = null; musicFilter = null; console.log("Background music stopped"); } } }
+
+        // --- Initialization ---
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, CAMERA_NEAR_PLANE, CAMERA_FAR_PLANE);
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            const playerGeo = new THREE.BoxGeometry(0.8, 1.5, 0.8);
+            playerMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 1.0, emissive: 0x000000 });
+            player = new THREE.Mesh(playerGeo, playerMaterial);
+            player.position.set(lanes[currentLane], 0.75, PLAYER_Z_POSITION);
+            scene.add(player);
+            playerCollider = new THREE.Box3().setFromObject(player);
+
+            // *** NEW *** Ground Setup
+            const groundGeo = new THREE.PlaneGeometry(20, groundLength); // Width 20, Length from constant
+            groundMaterial = new THREE.MeshStandardMaterial({
+                color: ENVIRONMENTS.SURFACE.groundColor,
+                emissive: ENVIRONMENTS.SURFACE.groundEmissiveColor,
+                emissiveIntensity: 0.6, // Adjust intensity as needed
+                side: THREE.DoubleSide,
+                roughness: 0.8, // Less shiny
+                metalness: 0.2
+            });
+            ground1 = new THREE.Mesh(groundGeo, groundMaterial);
+            ground1.rotation.x = -Math.PI / 2;
+            ground1.position.y = 0;
+            ground1.position.z = -groundLength / 2; // Start first ground centered behind player
+            scene.add(ground1);
+
+            ground2 = new THREE.Mesh(groundGeo, groundMaterial); // Reuse geometry and material
+            ground2.rotation.x = -Math.PI / 2;
+            ground2.position.y = 0;
+            ground2.position.z = -groundLength / 2 - groundLength; // Position second ground behind first
+            scene.add(ground2);
+            console.log("Ground planes added to scene.");
+            // --- END NEW Ground Setup ---
+
+            currentCameraZ = PLAYER_Z_POSITION + BASE_CAMERA_Z_OFFSET;
+            camera.position.set(0, BASE_CAMERA_Y, currentCameraZ);
+            camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+            composer = new EffectComposer(renderer);
+            const renderPass = new RenderPass(scene, camera);
+            composer.addPass(renderPass);
+            bloomPass = new UnrealBloomPass( new THREE.Vector2(window.innerWidth, window.innerHeight), 0.5, 0.6, 0.8 );
+            composer.addPass(bloomPass);
+            const outputPass = new OutputPass();
+            composer.addPass(outputPass);
+            applyEnvironment(ENVIRONMENTS.SURFACE, true); // Apply initial environment settings to ground material etc.
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('keydown', onKeyDown, false);
+            startButton.addEventListener('click', startGame);
+            retryButton.addEventListener('click', restartGame);
+            pauseButton.addEventListener('click', togglePause);
+        }
+
+        // --- Game State Functions ---
+        function startGame() { initAudio(); if (gameRunning) return; resetGame(); gameRunning = true; isPaused = false; startScreen.style.display = 'none'; gameOverScreen.style.display = 'none'; pauseOverlayElement.style.display = 'none'; pauseButton.textContent = 'Pause (P)'; startBackgroundMusic(); clock.start(); animate(); }
+        function gameOver(reason = "Collision") { if (!gameRunning) return; gameRunning = false; isPaused = false; clock.stop(); stopBackgroundMusic(); playTone(100, 0.5, 'sawtooth'); finalScoreElement.textContent = `Final Score: ${score}`; finalDistanceElement.textContent = `Distance Traveled: ${Math.floor(distance)} m`; finalKnowledgeElement.textContent = `Knowledge Collected: ${knowledgePoints} points`; gameOverReasonElement.textContent = `Reason: ${reason}`; gameOverReasonElement.style.color = (reason.includes("Oxygen") || reason.includes("Fuel")) ? '#ff8888' : '#ffdddd'; gameOverScreen.style.display = 'flex'; pauseOverlayElement.style.display = 'none'; shieldIndicator.style.display = 'none'; shieldIndicator.classList.remove('active-pulse'); cameraShakeIntensity = 0; }
+        function restartGame() { gameOverScreen.style.display = 'none'; startScreen.style.display = 'flex'; stopBackgroundMusic(); }
+        // *** MODIFIED *** resetGame to include ground planes
+        function resetGame() {
+            player.position.set(lanes[1], 0.75, PLAYER_Z_POSITION);
+            player.scale.set(1,1,1);
+            currentLane = 1;
+            targetLane = 1;
+            playerVelocityY = 0;
+            playerVelocityX = 0;
+            score = 0;
+            distance = 0;
+            knowledgePoints = 0;
+            updateHUD();
+            currentResource = maxResource;
+            resourceCritical = false;
+            updateResourceUI();
+            currentHazardEffect = null;
+            hazardTimer = 0;
+            lastHazardCheck = 0;
+            shieldActive = false;
+            nextShieldThreshold = shieldKnowledgeThreshold;
+            shieldIndicator.style.display = 'none';
+            shieldIndicator.classList.remove('active-pulse');
+            isJumpingZoom = false;
+            targetCameraZ = PLAYER_Z_POSITION + BASE_CAMERA_Z_OFFSET;
+            currentCameraZ = targetCameraZ;
+            cameraShakeIntensity = 0;
+            activeParticles.forEach(p => scene.remove(p)); activeParticles = [];
+            obstacles.forEach(obj => { if (obj.mesh) scene.remove(obj.mesh); }); collectibles.forEach(obj => scene.remove(obj)); obstacles = []; collectibles = [];
+            // Reset ground positions
+            if (ground1) ground1.position.z = -groundLength / 2;
+            if (ground2) ground2.position.z = -groundLength / 2 - groundLength;
+            nextEnvironmentChange = environmentChangeDistance;
+            applyEnvironment(ENVIRONMENTS.SURFACE, true); // Re-apply initial env
+            hideMessage();
+            pauseOverlayElement.style.display = 'none';
+            clock = new THREE.Clock(false);
+            stopBackgroundMusic();
+        }
+        function togglePause() { if (!gameRunning && !isPaused) return; isPaused = !isPaused; if (isPaused) { clock.stop(); pauseOverlayElement.style.display = 'block'; pauseButton.textContent = 'Resume (P)'; if(audioCtx) audioCtx.suspend().catch(e => console.error("Error suspending audio:", e)); playTone(300, 0.15, 'triangle', 0.2); } else { clock.start(); pauseOverlayElement.style.display = 'none'; pauseButton.textContent = 'Pause (P)'; if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(e => console.error("Error resuming audio:", e)); playTone(500, 0.15, 'triangle', 0.2); animate(); } }
+
+        // --- Environment Handling ---
+        // *** MODIFIED *** applyEnvironment to update shared ground material
+        function applyEnvironment(env, isInitial = false) {
+            currentEnvironment = env;
+            scene.background = new THREE.Color(env.color);
+            scene.fog = new THREE.FogExp2(env.fogColor, env.fogDensity);
+
+            // Update shared ground material
+            if (groundMaterial) {
+                groundMaterial.color.setHex(env.groundColor);
+                groundMaterial.emissive.setHex(env.groundEmissiveColor || 0x000000); // Use black if not defined
+                 // Optionally adjust other properties like wireframe, roughness per environment
+                 groundMaterial.wireframe = (env === ENVIRONMENTS.SPACE && Math.random() < 0.2); // Occasionally wireframe in space?
+                 groundMaterial.roughness = (env === ENVIRONMENTS.OCEAN) ? 0.6 : 0.8;
+                groundMaterial.needsUpdate = true;
+            } else {
+                console.error("Ground material not found during applyEnvironment!");
+            }
+
+            gravity = 0.008 * env.gravityMultiplier;
+            jumpForce = 0.24 * env.jumpMultiplier;
+            worldSpeed = baseSpeed * env.speedMultiplier;
+            resourceConsumptionRate = env.consumption;
+            updatePlayerAppearance();
+            if (isInitial || env.consumption > 0) { currentResource = maxResource; resourceCritical = false; }
+            updateResourceUI();
+            updateHUD();
+
+            if (!isInitial) {
+                playTone(700, 0.1, 'sawtooth');
+                playTone(900, 0.15, 'sawtooth', 0.2);
+                showMessage(`Transitioning to ${env.name}! Pressure: ${env.pressureText}.`, 4);
+                flashElement(hudElement, 'hud-bg-flash', 600); // Flash whole HUD background
+            }
+            playerVelocityX = 0;
+            currentHazardEffect = null;
+         }
+        function updatePlayerAppearance() { const env = currentEnvironment; playerMaterial.color.setHex(env.playerColor); playerMaterial.wireframe = (env === ENVIRONMENTS.SPACE); if (shieldActive) { playerMaterial.opacity = 0.75; playerMaterial.emissive.setHex(0x66ffff); } else { playerMaterial.opacity = 1.0; playerMaterial.emissive.setHex(0x000000); } playerMaterial.needsUpdate = true; }
+        function checkEnvironmentChange() { if (distance >= nextEnvironmentChange) { let nextEnv; if (currentEnvironment === ENVIRONMENTS.SURFACE) nextEnv = ENVIRONMENTS.OCEAN; else if (currentEnvironment === ENVIRONMENTS.OCEAN) nextEnv = ENVIRONMENTS.SPACE; else nextEnv = ENVIRONMENTS.SURFACE; applyEnvironment(nextEnv); nextEnvironmentChange += environmentChangeDistance; } }
+
+        // --- Particle System --- (Keep as is)
+        const knowledgeParticleMaterial = new THREE.MeshStandardMaterial({ color: 0x007bff, emissive: 0x55ccff, emissiveIntensity: 1.5, transparent: true, opacity: 0.8 }); const resourceParticleMaterial = new THREE.MeshStandardMaterial({ color: 0xffc107, emissive: 0xffea00, emissiveIntensity: 1.2, transparent: true, opacity: 0.8 }); const particleGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1); function createParticles(position, type = 'knowledge') { const particleCount = (type === 'knowledge') ? 15 : 8; const particleSpeed = (type === 'knowledge') ? 1.5 : 1.0; const particleLifetime = (type === 'knowledge') ? 0.6 : 0.4; const material = (type === 'knowledge') ? knowledgeParticleMaterial : resourceParticleMaterial; for (let i = 0; i < particleCount; i++) { const particle = new THREE.Mesh(particleGeometry, material.clone()); particle.position.copy(position); const velocity = new THREE.Vector3( Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1 ); velocity.normalize().multiplyScalar(Math.random() * particleSpeed); particle.userData = { velocity: velocity, lifetime: particleLifetime, initialLifetime: particleLifetime }; scene.add(particle); activeParticles.push(particle); } } function updateParticles(deltaTime) { for (let i = activeParticles.length - 1; i >= 0; i--) { const particle = activeParticles[i]; particle.userData.lifetime -= deltaTime; if (particle.userData.lifetime <= 0) { scene.remove(particle); activeParticles.splice(i, 1); } else { particle.position.addScaledVector(particle.userData.velocity, deltaTime); particle.userData.velocity.multiplyScalar(0.96); if (particle.material) { particle.material.opacity = Math.max(0, (particle.userData.lifetime / particle.userData.initialLifetime) * 0.8); particle.material.needsUpdate = true; } else { console.warn("Particle missing material during update."); scene.remove(particle); activeParticles.splice(i, 1); } } } }
+
+        // --- Game Logic ---
+        // *** MODIFIED *** handleMovement for ground planes
+        function handleMovement(deltaTime) {
+             handleHazards(deltaTime);
+             let speedMultiplier = (currentHazardEffect?.type === 'debris' ? 0.5 : 1.0);
+             let calculatedWorldSpeed = worldSpeed * speedMultiplier;
+             if (isNaN(calculatedWorldSpeed) || typeof calculatedWorldSpeed === 'undefined') { calculatedWorldSpeed = baseSpeed; }
+             const currentWorldSpeed = calculatedWorldSpeed;
+
+             // Move and reposition ground planes
+             if (ground1 && ground2) {
+                 ground1.position.z += currentWorldSpeed;
+                 ground2.position.z += currentWorldSpeed;
+
+                 // If ground1 is fully past the despawn point, move it 2 lengths forward (behind ground2)
+                 if (ground1.position.z > PLAYER_Z_POSITION + DESPAWN_DISTANCE + groundLength / 2) {
+                      ground1.position.z -= groundLength * 2;
+                      // console.log("Repositioned Ground 1"); // Debug log
+                 }
+                 // If ground2 is fully past the despawn point, move it 2 lengths forward (behind ground1)
+                 if (ground2.position.z > PLAYER_Z_POSITION + DESPAWN_DISTANCE + groundLength / 2) {
+                      ground2.position.z -= groundLength * 2;
+                      // console.log("Repositioned Ground 2"); // Debug log
+                 }
+             } else {
+                 console.error("Ground plane(s) not found during handleMovement!");
+             }
+
+             // Obstacle and Collectible movement (unchanged)
+             obstacles.forEach(o => { if(o.mesh && !isNaN(o.mesh.position.z) && !isNaN(currentWorldSpeed)) { o.mesh.position.z += currentWorldSpeed; } else if(o.mesh) { /* Warning */ } });
+             collectibles.forEach(c => { if(!isNaN(c.position.z) && !isNaN(currentWorldSpeed)) { c.position.z += currentWorldSpeed; } else { /* Warning */ } });
+
+             // Player lane switching (unchanged)
+             const targetX = lanes[targetLane]; let laneSwitchMultiplier = 1.0; if (currentHazardEffect?.type === 'wind' || currentHazardEffect?.type === 'current') { laneSwitchMultiplier = 0.8; } const laneSwitchForce = (targetX - player.position.x) * 0.12 * laneSwitchMultiplier; playerVelocityX += laneSwitchForce; if (currentHazardEffect?.force) { playerVelocityX += currentHazardEffect.force * (Math.random() > 0.5 ? 1 : -1); } playerVelocityX *= 0.88; player.position.x += playerVelocityX; if (player.position.x < lanes[0] - 0.6) player.position.x = lanes[0] - 0.6; if (player.position.x > lanes[lanes.length - 1] + 0.6) player.position.x = lanes[lanes.length - 1] + 0.6;
+
+             // Player vertical movement (unchanged)
+             playerVelocityY -= gravity; player.position.y += playerVelocityY; if (player.position.y <= 0.75) { player.position.y = 0.75; if (playerVelocityY < -0.02) { triggerCameraShake(0.03, 0.2); } playerVelocityY = 0; if(isJumpingZoom) { isJumpingZoom = false; targetCameraZ = PLAYER_Z_POSITION + BASE_CAMERA_Z_OFFSET; } }
+
+             // Score and distance update (unchanged, pop handled here)
+             let previousScore = score; distance += currentWorldSpeed; score = Math.floor(distance) + knowledgePoints * 30; if (score > previousScore && (score - previousScore) > 5) { flashElement(scoreElement, 'score-pop', 200); }
+        }
+        // handleResources, handleHazards, triggerHazard, activateShield, deactivateShield (Keep as is)
+        function handleResources(deltaTime) { if (resourceConsumptionRate > 0 && currentResource > 0) { currentResource -= resourceConsumptionRate * deltaTime; currentResource = Math.max(0, currentResource); updateResourceUI(); if (currentResource <= 0) { gameOver(`Ran out of ${currentEnvironment.resourceLabel}`); return; } const lowThreshold = maxResource * 0.25; const justBecameCritical = currentResource <= lowThreshold && !resourceCritical; const justRecovered = currentResource > lowThreshold && resourceCritical; resourceCritical = currentResource <= lowThreshold; if (justBecameCritical) { playTone(220, 0.3, 'sine', 0.4); resourceBarOuter.classList.add('critical-pulse'); } else if (justRecovered) { resourceBarOuter.classList.remove('critical-pulse'); } } else { resourceBarOuter.style.display = 'none'; resourceBarOuter.classList.remove('critical-pulse'); } }
+        function handleHazards(deltaTime) { const currentTime = clock.getElapsedTime(); if (currentHazardEffect && currentTime >= hazardTimer) { showMessage(`${currentHazardEffect.type} effect ended.`, 2); currentHazardEffect = null; flashElement(hudElement, 'hud-bg-flash', 500); } if (!currentHazardEffect && currentTime - lastHazardCheck > HAZARD_CHECK_INTERVAL) { lastHazardCheck = currentTime; const possibleHazards = currentEnvironment.hazards; if (possibleHazards && possibleHazards.length > 0 && Math.random() < HAZARD_PROBABILITY) { const hazardType = possibleHazards[Math.floor(Math.random() * possibleHazards.length)]; triggerHazard(hazardType, currentTime); } } }
+        function triggerHazard(type, currentTime) { let duration = 2.0 + Math.random() * 1.5; let force = 0; switch (type) { case 'current': case 'wind': force = 0.025 + Math.random() * 0.015; currentHazardEffect = { type, duration, force }; showMessage(`Strong ${type}!`, duration); playTone(150, duration * 0.8, 'sawtooth', 0.15); break; case 'debris': force = 0.005 + Math.random() * 0.005; currentHazardEffect = { type, duration, force }; showMessage(`${type.charAt(0).toUpperCase() + type.slice(1)} field! SLOW DOWN!`, duration); playTone(250, 0.5, 'square', 0.2); break; } hazardTimer = currentTime + duration; flashElement(hudElement, 'hud-bg-flash', 500); }
+        function activateShield(currentTime) { if (shieldActive) return; shieldActive = true; shieldTimer = currentTime + shieldDuration; shieldIndicator.style.display = 'block'; shieldIndicator.classList.add('active-pulse'); updatePlayerAppearance(); playTone(1200, 0.3, 'sine'); showMessage("Knowledge Shield ACTIVE!", shieldDuration); }
+        function deactivateShield() { shieldActive = false; shieldIndicator.style.display = 'none'; shieldIndicator.classList.remove('active-pulse'); updatePlayerAppearance(); }
+
+        // --- Camera Effects --- (Keep as is)
+        function triggerCameraShake(intensity, duration) { if (intensity >= cameraShakeIntensity) { cameraShakeIntensity = intensity; cameraShakeTimer = duration; } }
+        function handleCamera(deltaTime) { const followSpeedX = 0.08; let targetPosX = player.position.x; let targetPosY = BASE_CAMERA_Y; let targetPosZ = targetCameraZ; camera.position.x += (targetPosX - camera.position.x) * followSpeedX; camera.position.y = targetPosY; currentCameraZ += (targetCameraZ - currentCameraZ) * ZOOM_SPEED; camera.position.z = currentCameraZ; let shakeOffsetX = 0; let shakeOffsetY = 0; if (cameraShakeIntensity > 0 && cameraShakeTimer > 0) { shakeOffsetX = (Math.random() - 0.5) * 2 * cameraShakeIntensity; shakeOffsetY = (Math.random() - 0.5) * 2 * cameraShakeIntensity; camera.position.x += shakeOffsetX; camera.position.y += shakeOffsetY; cameraShakeIntensity *= SHAKE_DECAY; cameraShakeTimer -= deltaTime; if (cameraShakeTimer <= 0 || cameraShakeIntensity < 0.001) { cameraShakeIntensity = 0; cameraShakeTimer = 0; } } const lookAtTargetY = 1.0; const lookAtPos = new THREE.Vector3( player.position.x, lookAtTargetY, player.position.z - 1 ); camera.lookAt(lookAtPos); }
+
+        // --- Jump, Spawn, Collision --- (Keep as is)
+        function jump() { if (player.position.y <= 0.76) { playerVelocityY = jumpForce; playTone(523, 0.12, 'triangle'); if (!isJumpingZoom) { isJumpingZoom = true; targetCameraZ = PLAYER_Z_POSITION + BASE_CAMERA_Z_OFFSET - JUMP_ZOOM_AMOUNT; } } }
+        function spawnObjects() { const spawnZ = PLAYER_Z_POSITION + SPAWN_DISTANCE; const spawnLaneIndex = Math.floor(Math.random() * lanes.length); const obstacleSpawnChance = 0.012; const collectibleSpawnChance = 0.018; if (Math.random() < obstacleSpawnChance) { const types = currentEnvironment.obstacleTypes; const totalWeight = types.reduce((sum, t) => sum + t.weight, 0); let randomWeight = Math.random() * totalWeight; let chosenTypeInfo = types[0]; for (const typeInfo of types) { if (randomWeight < typeInfo.weight) { chosenTypeInfo = typeInfo; break; } randomWeight -= typeInfo.weight; } const chosenType = chosenTypeInfo.type; let obstacleGeo, obstacleMat, obstacleMesh; let obstacleYPosition = 0.5; if (chosenType === OBSTACLE_TYPE.VENT) { obstacleGeo = ventGeo; obstacleMat = ventMat.clone(); obstacleYPosition = 0.1; } else { obstacleGeo = new THREE.BoxGeometry(1, 1, 1); let color = 0xff0000; let emissiveColor = 0x000000; if (chosenType === OBSTACLE_TYPE.FRAGILE) { color = 0xaaaaff; emissiveColor = 0x333388; } obstacleMat = new THREE.MeshStandardMaterial({ color: color, emissive: emissiveColor }); } obstacleMesh = new THREE.Mesh(obstacleGeo, obstacleMat); obstacleMesh.position.set(lanes[spawnLaneIndex], obstacleYPosition, spawnZ); obstacles.push({ mesh: obstacleMesh, type: chosenType, collider: new THREE.Box3() }); scene.add(obstacleMesh); } if (Math.random() < collectibleSpawnChance) { let collectibleSpawnZ = spawnZ - (Math.random() * 20); if (obstacles.some(o => o.mesh && o.mesh.position.x === lanes[spawnLaneIndex] && Math.abs(o.mesh.position.z - collectibleSpawnZ) < 5)) { collectibleSpawnZ -= 10; } let collectibleType = 'knowledge'; if (currentEnvironment.consumption > 0 && Math.random() < 0.5) { collectibleType = 'resource'; } let collectibleGeo, collectibleMat, collectibleMesh; if (collectibleType === 'resource') { collectibleGeo = resourceCollectibleGeo; collectibleMat = resourceCollectibleMat; } else { collectibleGeo = knowledgeCollectibleGeo; collectibleMat = knowledgeCollectibleMat; } collectibleMesh = new THREE.Mesh(collectibleGeo, collectibleMat); collectibleMesh.position.set(lanes[spawnLaneIndex], 1, collectibleSpawnZ); collectibleMesh.userData = { type: collectibleType }; collectibles.push(collectibleMesh); scene.add(collectibleMesh); } }
+        function checkCollisions() { playerCollider.setFromObject(player); const currentTime = clock.getElapsedTime(); for (let i = obstacles.length - 1; i >= 0; i--) { const obstacleObj = obstacles[i]; const obstacleMesh = obstacleObj.mesh; if (!obstacleMesh) { obstacles.splice(i, 1); continue; } if (Math.abs(obstacleMesh.position.z - player.position.z) < 5) { obstacleObj.collider.setFromObject(obstacleMesh); if (playerCollider.intersectsBox(obstacleObj.collider)) { if (obstacleObj.type === OBSTACLE_TYPE.VENT) { playerVelocityY = OCEAN_VENT_BOOST; playTone(900, 0.25, 'sine', 0.3); triggerCameraShake(0.05, 0.3); scene.remove(obstacleMesh); obstacles.splice(i, 1); continue; } else if (shieldActive) { deactivateShield(); playTone(300, 0.4, 'sawtooth', 0.5); triggerCameraShake(0.1, 0.3); showMessage("Shield absorbed impact!", 2); scene.remove(obstacleMesh); obstacles.splice(i, 1); continue; } else if (obstacleObj.type === OBSTACLE_TYPE.FRAGILE) { playTone(600, 0.3, 'square', 0.4); triggerCameraShake(0.08, 0.25); showMessage("Fragile obstacle shattered!", 1); let oldScore = score; score -= 10; score = Math.max(0, score); // Prevent negative score
+                                if(score !== oldScore) flashElement(scoreElement, 'score-pop', 200); // Flash red/negative? Maybe just update text
+                                updateHUD(); scene.remove(obstacleMesh); obstacles.splice(i, 1); continue; } else { triggerCameraShake(0.2, 0.5); gameOver("Collision with obstacle"); return; } } } if (obstacleMesh.position.z > PLAYER_Z_POSITION + DESPAWN_DISTANCE) { scene.remove(obstacleMesh); obstacles.splice(i, 1); } } for (let i = collectibles.length - 1; i >= 0; i--) { const collectible = collectibles[i]; if (!collectible) { collectibles.splice(i, 1); continue; } if (Math.abs(collectible.position.z - player.position.z) < 5) { if (player.position.distanceTo(collectible.position) < 1.2) { const type = collectible.userData.type; if (type === 'knowledge') { let oldKnowledge = knowledgePoints; knowledgePoints++; playTone(880, 0.08, 'sine'); createParticles(collectible.position.clone(), 'knowledge'); showFact(); updateHUD(); if (knowledgePoints >= nextShieldThreshold && !shieldActive) { activateShield(currentTime); nextShieldThreshold += shieldKnowledgeThreshold; } } else if (type === 'resource') { if (currentEnvironment.consumption > 0) { currentResource = Math.min(maxResource, currentResource + resourceReplenishAmount); playTone(660, 0.12, 'triangle', 0.35); createParticles(collectible.position.clone(), 'resource'); updateResourceUI(); showMessage(`${currentEnvironment.resourceLabel} replenished!`, 1.5); flashElement(resourceBarOuter, 'resource-flash', 400); } } scene.remove(collectible); collectibles.splice(i, 1); continue; } } if (collectible.position.z > PLAYER_Z_POSITION + DESPAWN_DISTANCE) { scene.remove(collectible); collectibles.splice(i, 1); } } if (shieldActive && currentTime >= shieldTimer) { deactivateShield(); showMessage("Shield expired.", 2); } }
+
+        // --- UI and Info --- (Keep as is)
+        function updateHUD() { scoreElement.textContent = `Score: ${score}`; environmentElement.textContent = `Env: ${currentEnvironment.name}`; pressureElement.textContent = `Pressure: ${currentEnvironment.pressureText}`; }
+        function updateResourceUI() { if (currentEnvironment.consumption > 0) { resourceBarOuter.style.display = 'block'; resourceLabelElement.textContent = `${currentEnvironment.resourceLabel}:`; const percentage = (currentResource / maxResource) * 100; resourceBarInner.style.width = `${percentage}%`; resourceBarInner.classList.remove('low', 'medium'); if (percentage <= 25) { resourceBarInner.classList.add('low'); } else if (percentage <= 50) { resourceBarInner.classList.add('medium'); } } else { resourceBarOuter.style.display = 'none'; resourceLabelElement.textContent = ''; resourceBarOuter.classList.remove('critical-pulse'); } }
+        function showFact() { const currentTime = clock.getElapsedTime(); if (currentTime - lastFactTime < FACT_COOLDOWN && knowledgePoints > 1) return; const envFacts = facts[currentEnvironment.name.toUpperCase()] || []; const generalFacts = facts.GENERAL; const availableFacts = [...envFacts, ...generalFacts]; const fact = availableFacts[Math.floor(Math.random() * availableFacts.length)]; showMessage(fact, 3); lastFactTime = currentTime; }
+        let messageTimeout; function showMessage(text, duration = 3) { messageCenterElement.textContent = text; messageCenterElement.classList.add('visible'); clearTimeout(messageTimeout); messageTimeout = setTimeout(hideMessage, duration * 1000); }
+        function hideMessage() { messageCenterElement.classList.remove('visible'); }
+
+        // --- Event Handlers --- (Keep as is)
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); if(composer) composer.setSize(window.innerWidth, window.innerHeight); }
+        function onKeyDown(event) { if (event.key.toLowerCase() === 'p') { togglePause(); return; } if (!gameRunning || isPaused) return; switch (event.key) { case 'ArrowLeft': case 'a': targetLane = Math.max(0, currentLane - 1); break; case 'ArrowRight': case 'd': targetLane = Math.min(lanes.length - 1, currentLane + 1); break; case 'ArrowUp': case 'w': case ' ': jump(); break; case 'ArrowDown': case 's': if (player.position.y > 0.76) { playerVelocityY -= jumpForce * 0.6; } break; } currentLane = targetLane; }
+
+        // --- Animation Loop --- (Keep as is)
+        function animate() { if (!gameRunning || isPaused) return; requestAnimationFrame(animate); const deltaTime = clock.getDelta(); handleResources(deltaTime); if (!gameRunning) return; handleMovement(deltaTime); spawnObjects(); checkCollisions(); if (!gameRunning) return; checkEnvironmentChange(); updateHUD(); updateParticles(deltaTime); handleCamera(deltaTime); if (composer) { composer.render(deltaTime); } else { console.warn("Composer not found, rendering directly."); renderer.render(scene, camera); } }
+
+        // --- Start --- (Keep as is)
+        try { init(); } catch (error) { console.error("Error during initialization:", error); document.body.innerHTML = `<div style="color: red; padding: 20px;"><h1>Initialization Error</h1><p>Could not start the game. Please check the console (F12) for details.</p><pre>${error.stack || error}</pre></div>`; }
+
+    </script>
+</body>
+</html>
